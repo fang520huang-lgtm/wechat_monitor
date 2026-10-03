@@ -12,9 +12,7 @@
 
 ## 下载安装
 
-> **[点击前往百度网盘下载手机安装包](https://pan.baidu.com/s/1nCJAYWThCFSjgWkhyC688g?pwd=1003)**
->
-> 提取码：`1003`
+> **[点击直接下载手机安装包（v3.0.0）](https://github.com/fang520huang-lgtm/wechat_monitor/releases/download/v3.0.0/wechat-message-alarm-v3.0.0.apk)**
 
 下载完成后，在手机中打开安装包并按系统提示完成安装。如果浏览器阻止安装，请在系统设置中临时允许当前浏览器安装未知来源应用。
 
