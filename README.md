@@ -96,6 +96,15 @@ app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## 版本规则
+
+项目采用 `主版本.次版本.修订版本` 的版本号格式：
+
+- 大规模功能或结构调整：提升主版本，例如 `2.x.x` → `3.0.0`。
+- 新增独立功能且保持兼容：提升次版本，例如 `3.0.x` → `3.1.0`。
+- 修复问题、调整文字或样式：提升修订版本，例如 `3.1.0` → `3.1.1`。
+- 每次发布时，内部 `versionCode` 也必须递增。
+
 ## 实现方式
 
 - 使用 Android 通知监听服务接收微信系统通知。
