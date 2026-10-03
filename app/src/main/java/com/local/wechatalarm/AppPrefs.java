@@ -17,6 +17,7 @@ final class AppPrefs {
     private static final String KEY_RINGTONE_URI = "ringtone_uri";
     private static final String KEY_RINGTONE_NAME = "ringtone_name";
     private static final String KEY_VIBRATION_ENABLED = "vibration_enabled";
+    private static final String KEY_LISTENER_PROBE_ACK = "listener_probe_ack";
 
     private AppPrefs() {}
 
@@ -103,6 +104,18 @@ final class AppPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_VIBRATION_ENABLED, enabled)
+                .apply();
+    }
+
+    static long getListenerProbeAck(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getLong(KEY_LISTENER_PROBE_ACK, 0L);
+    }
+
+    static void acknowledgeListenerProbe(Context context, long token) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_LISTENER_PROBE_ACK, token)
                 .apply();
     }
 }

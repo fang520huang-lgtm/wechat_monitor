@@ -10,8 +10,8 @@ public class RebindReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.i(TAG, "Requesting listener rebind after: "
+        Log.i(TAG, "Starting listener monitor after: "
                 + (intent == null ? "unknown" : intent.getAction()));
-        WeChatNotificationListener.requestReconnect(context);
+        ListenerMonitorService.ensureRunning(context);
     }
 }

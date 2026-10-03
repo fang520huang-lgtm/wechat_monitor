@@ -22,6 +22,7 @@ public class PermissionSettingsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        ListenerMonitorService.ensureRunning(this);
         updateStatus();
     }
 
@@ -44,7 +45,7 @@ public class PermissionSettingsActivity extends Activity {
         Button reconnectButton = AppUi.button(this, "重新连接监听服务");
         reconnectButton.setOnClickListener(v -> {
             WeChatNotificationListener.requestReconnect(this);
-            Toast.makeText(this, "已请求系统重新连接监听服务", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "正在强制重新连接监听服务", Toast.LENGTH_SHORT).show();
         });
         root.addView(reconnectButton, AppUi.fullWidth(this, 10));
 
@@ -72,11 +73,13 @@ public class PermissionSettingsActivity extends Activity {
             return;
         }
         boolean granted = ListenerAccess.isGranted(this);
+        boolean connected = WeChatNotificationListener.isConnected();
         statusView.setText(granted
-                ? "✓ 通知监听已授权"
+                ? (connected ? "✓ 通知监听已连接" : "⟳ 已授权，正在自动恢复连接")
                 : "⚠ 尚未授予通知使用权\n请点击下方按钮完成授权");
-        statusView.setTextColor(granted ? Color.rgb(22, 110, 55) : Color.rgb(180, 75, 0));
-        AppUi.applyStatusPanel(this, statusView, granted);
+        statusView.setTextColor(granted && connected
+                ? Color.rgb(22, 110, 55) : Color.rgb(180, 75, 0));
+        AppUi.applyStatusPanel(this, statusView, granted && connected);
     }
 
     private void openBatterySettings() {

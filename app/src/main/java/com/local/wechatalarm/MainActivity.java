@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         AlarmController.ensureChannel(this);
         MonitorNotification.ensureChannel(this);
+        ListenerMonitorService.ensureRunning(this);
         setContentView(buildContent());
         requestNotificationPermissionIfNeeded();
     }
@@ -35,7 +36,7 @@ public class MainActivity extends Activity {
         super.onResume();
         updateSummaries();
         if (ListenerAccess.isGranted(this)) {
-            WeChatNotificationListener.requestReconnect(this);
+            ListenerMonitorService.ensureRunning(this);
         }
     }
 
@@ -113,17 +114,20 @@ public class MainActivity extends Activity {
             targetCardSummary = "已监听 " + targets.size() + " 个对象";
         }
 
+        boolean connected = WeChatNotificationListener.isConnected();
         statusView.setText(granted
-                ? "●  监听运行中\n" + targetSummary
+                ? (connected ? "●  监听运行中\n" : "●  正在确认监听连接\n") + targetSummary
                 : "需要完成通知监听授权\n进入“权限与后台”进行设置");
         statusView.setTextColor(granted ? AppUi.COLOR_ACCENT : Color.rgb(180, 92, 0));
-        AppUi.applyStatusPanel(this, statusView, granted);
+        AppUi.applyStatusPanel(this, statusView, granted && connected);
 
         String ringtoneSummary = AppPrefs.getRingtoneName(this);
         targetsRow.setSummary(targetCardSummary);
         soundRow.setSummary("铃声：" + ringtoneSummary
                 + "\n震动：" + (AppPrefs.isVibrationEnabled(this) ? "开启" : "关闭"));
-        permissionsRow.setSummary(granted ? "通知监听已授权" : "需要授予通知使用权");
+        permissionsRow.setSummary(granted
+                ? (connected ? "通知监听已连接" : "已授权，正在自动恢复连接")
+                : "需要授予通知使用权");
     }
 
     private void requestNotificationPermissionIfNeeded() {

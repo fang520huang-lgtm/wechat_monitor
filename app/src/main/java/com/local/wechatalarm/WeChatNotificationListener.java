@@ -3,9 +3,11 @@ package com.local.wechatalarm;
 import android.app.Notification;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
@@ -14,48 +16,86 @@ import android.util.Log;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WeChatNotificationListener extends NotificationListenerService {
     private static final String TAG = "WeChatAlarmListener";
     private static final String WECHAT_PACKAGE = "com.tencent.mm";
     private static final int MAX_SEEN = 300;
+    private static final long REBIND_DELAY_MS = 700L;
+    private static final long REBIND_COOLDOWN_MS = 5_000L;
+    private static final AtomicBoolean REBIND_PENDING = new AtomicBoolean(false);
+    private static volatile boolean connected;
+    private static volatile long lastRebindRequestElapsed;
+    private static volatile WeChatNotificationListener activeInstance;
 
     private final Set<String> seen = new LinkedHashSet<>();
     private volatile boolean ready;
     private long connectedAtWallTime;
 
     static void requestReconnect(Context context) {
-        requestRebind(new ComponentName(context, WeChatNotificationListener.class));
+        if (!ListenerAccess.isGranted(context)) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (REBIND_PENDING.get()
+                || now - lastRebindRequestElapsed < REBIND_COOLDOWN_MS) {
+            return;
+        }
+        lastRebindRequestElapsed = now;
+        REBIND_PENDING.set(true);
+
+        ComponentName component = new ComponentName(
+                context.getApplicationContext(), WeChatNotificationListener.class);
+        Log.w(TAG, "Forcing notification listener unbind/rebind cycle.");
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                requestUnbind(component);
+            } else if (activeInstance != null) {
+                activeInstance.requestUnbind();
+            }
+        } catch (RuntimeException exc) {
+            Log.w(TAG, "Unable to request listener unbind", exc);
+        }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            try {
+                requestRebind(component);
+                Log.i(TAG, "Notification listener rebind requested.");
+            } catch (RuntimeException exc) {
+                Log.e(TAG, "Unable to request listener rebind", exc);
+            } finally {
+                REBIND_PENDING.set(false);
+            }
+        }, REBIND_DELAY_MS);
+    }
+
+    static boolean isConnected() {
+        return connected;
     }
 
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
-        try {
-            MonitorNotification.removeLegacy(this);
-            Notification monitorNotification = MonitorNotification.build(this);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                        MonitorNotification.NOTIFICATION_ID,
-                        monitorNotification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            } else {
-                startForeground(MonitorNotification.NOTIFICATION_ID, monitorNotification);
-            }
-            Log.i(TAG, "Notification listener promoted to foreground automatically.");
-        } catch (RuntimeException exc) {
-            Log.e(TAG, "Unable to promote notification listener to foreground", exc);
-        }
+        activeInstance = this;
+        connected = true;
+        REBIND_PENDING.set(false);
+        ListenerMonitorService.ensureRunning(this);
+        MonitorNotification.removeLegacy(this);
+        MonitorNotification.refresh(this);
         connectedAtWallTime = System.currentTimeMillis();
         synchronized (seen) {
             seen.clear();
-            StatusBarNotification[] active = getActiveNotifications();
-            if (active != null) {
-                for (StatusBarNotification sbn : active) {
-                    if (WECHAT_PACKAGE.equals(sbn.getPackageName())) {
-                        seen.add(fingerprint(sbn));
+            try {
+                StatusBarNotification[] active = getActiveNotifications();
+                if (active != null) {
+                    for (StatusBarNotification sbn : active) {
+                        if (WECHAT_PACKAGE.equals(sbn.getPackageName())) {
+                            seen.add(fingerprint(sbn));
+                        }
                     }
                 }
+            } catch (RuntimeException exc) {
+                Log.w(TAG, "Unable to seed active notifications during reconnect", exc);
             }
         }
         ready = true;
@@ -65,9 +105,20 @@ public class WeChatNotificationListener extends NotificationListenerService {
     @Override
     public void onListenerDisconnected() {
         ready = false;
-        Log.w(TAG, "Listener disconnected; requesting rebind.");
+        connected = false;
+        Log.w(TAG, "Listener disconnected; forcing a clean reconnect.");
         super.onListenerDisconnected();
         requestReconnect(this);
+    }
+
+    @Override
+    public void onDestroy() {
+        ready = false;
+        connected = false;
+        if (activeInstance == this) {
+            activeInstance = null;
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -75,6 +126,9 @@ public class WeChatNotificationListener extends NotificationListenerService {
         Log.i(TAG, "onNotificationPosted package="
                 + (sbn == null ? "null" : sbn.getPackageName())
                 + ", ready=" + ready);
+        if (sbn != null && ListenerMonitorService.handleProbe(this, sbn)) {
+            return;
+        }
         if (!ready || sbn == null || !WECHAT_PACKAGE.equals(sbn.getPackageName())) {
             return;
         }
