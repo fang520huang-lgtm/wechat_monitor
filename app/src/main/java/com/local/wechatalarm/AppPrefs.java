@@ -17,6 +17,7 @@ final class AppPrefs {
     private static final String KEY_RINGTONE_URI = "ringtone_uri";
     private static final String KEY_RINGTONE_NAME = "ringtone_name";
     private static final String KEY_VIBRATION_ENABLED = "vibration_enabled";
+    private static final String KEY_MONITORING_ENABLED = "monitoring_enabled";
     private static final String KEY_LISTENER_PROBE_ACK = "listener_probe_ack";
 
     private AppPrefs() {}
@@ -104,6 +105,18 @@ final class AppPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_VIBRATION_ENABLED, enabled)
+                .apply();
+    }
+
+    static boolean isMonitoringEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_MONITORING_ENABLED, true);
+    }
+
+    static void setMonitoringEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_MONITORING_ENABLED, enabled)
                 .apply();
     }
 

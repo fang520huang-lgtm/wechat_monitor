@@ -92,12 +92,26 @@ final class MonitorNotification {
         }
     }
 
+    static void cancel(Context context) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        manager.cancel(NOTIFICATION_ID);
+        removeLegacy(context);
+    }
+
     static void refresh(Context context) {
+        if (!AppPrefs.isMonitoringEnabled(context)) {
+            cancel(context);
+            return;
+        }
         context.getSystemService(NotificationManager.class)
                 .notify(NOTIFICATION_ID, build(context));
     }
 
     static void refreshWithProbe(Context context, long probeToken) {
+        if (!AppPrefs.isMonitoringEnabled(context)) {
+            cancel(context);
+            return;
+        }
         context.getSystemService(NotificationManager.class)
                 .notify(NOTIFICATION_ID, build(context, probeToken));
     }

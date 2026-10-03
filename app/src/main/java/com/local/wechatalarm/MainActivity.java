@@ -17,9 +17,12 @@ public class MainActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 1001;
 
     private TextView statusView;
+    private TextView noteView;
+    private AppUi.ToggleRow monitoringRow;
     private AppUi.NavigationRow targetsRow;
     private AppUi.NavigationRow soundRow;
     private AppUi.NavigationRow permissionsRow;
+    private boolean updatingMonitoringSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +47,16 @@ public class MainActivity extends Activity {
         LinearLayout root = AppUi.newRoot(this);
         AppUi.addHomeHeader(this, root, "微信消息闹钟",
                 "微信指定联系人来消息时持续响铃。");
+
+        LinearLayout monitoringGroup = AppUi.group(this);
+        monitoringRow = AppUi.toggleRow(this, "消息监听");
+        monitoringRow.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (!updatingMonitoringSwitch) {
+                setMonitoringEnabled(checked);
+            }
+        });
+        monitoringGroup.addView(monitoringRow, AppUi.fullWidth(this, 0));
+        root.addView(monitoringGroup, AppUi.fullWidth(this, 14));
 
         statusView = new TextView(this);
         statusView.setTextSize(15);
@@ -85,12 +98,11 @@ public class MainActivity extends Activity {
         stopButton.setOnClickListener(v -> AlarmController.stop(this));
         root.addView(stopButton, AppUi.fullWidth(this, 22));
 
-        TextView note = new TextView(this);
-        note.setText("提示：保留通知栏的“微信消息监听中”，并允许本 App 自启动、后台省电策略设为“不限制”。");
-        note.setTextSize(15);
-        note.setTextColor(Color.DKGRAY);
-        note.setLineSpacing(0, 1.15f);
-        root.addView(note, AppUi.fullWidth(this, 0));
+        noteView = new TextView(this);
+        noteView.setTextSize(15);
+        noteView.setTextColor(Color.DKGRAY);
+        noteView.setLineSpacing(0, 1.15f);
+        root.addView(noteView, AppUi.fullWidth(this, 0));
 
         return AppUi.wrap(this, root);
     }
@@ -100,6 +112,7 @@ public class MainActivity extends Activity {
             return;
         }
         boolean granted = ListenerAccess.isGranted(this);
+        boolean monitoringEnabled = AppPrefs.isMonitoringEnabled(this);
         Set<String> targets = AppPrefs.getTargets(this);
         String targetSummary;
         String targetCardSummary;
@@ -114,20 +127,50 @@ public class MainActivity extends Activity {
             targetCardSummary = "已监听 " + targets.size() + " 个对象";
         }
 
-        boolean connected = WeChatNotificationListener.isConnected();
-        statusView.setText(granted
-                ? (connected ? "●  监听运行中\n" : "●  正在确认监听连接\n") + targetSummary
-                : "需要完成通知监听授权\n进入“权限与后台”进行设置");
-        statusView.setTextColor(granted ? AppUi.COLOR_ACCENT : Color.rgb(180, 92, 0));
-        AppUi.applyStatusPanel(this, statusView, granted && connected);
+        updatingMonitoringSwitch = true;
+        monitoringRow.setChecked(monitoringEnabled);
+        updatingMonitoringSwitch = false;
+        monitoringRow.setSummary(monitoringEnabled
+                ? "已开启，收到指定联系人消息时提醒"
+                : "已关闭，不监听消息且不显示常驻通知");
+
+        if (!monitoringEnabled) {
+            statusView.setText("监听已关闭\n打开上方开关即可恢复");
+            statusView.setTextColor(AppUi.COLOR_SUBTEXT);
+            AppUi.applyPausedStatusPanel(this, statusView);
+        } else {
+            statusView.setText(granted
+                    ? "●  监听运行中\n" + targetSummary
+                    : "需要完成通知监听授权\n进入“权限与后台”进行设置");
+            statusView.setTextColor(granted
+                    ? AppUi.COLOR_ACCENT : Color.rgb(180, 92, 0));
+            AppUi.applyStatusPanel(this, statusView, granted);
+        }
 
         String ringtoneSummary = AppPrefs.getRingtoneName(this);
         targetsRow.setSummary(targetCardSummary);
         soundRow.setSummary("铃声：" + ringtoneSummary
                 + "\n震动：" + (AppPrefs.isVibrationEnabled(this) ? "开启" : "关闭"));
-        permissionsRow.setSummary(granted
-                ? (connected ? "通知监听已连接" : "已授权，正在自动恢复连接")
-                : "需要授予通知使用权");
+        permissionsRow.setSummary(!monitoringEnabled
+                ? (granted ? "通知使用权已保留，开启后自动连接" : "需要授予通知使用权")
+                : (granted ? "通知监听已连接" : "需要授予通知使用权"));
+        noteView.setText(monitoringEnabled
+                ? "提示：保留通知栏的“微信消息监听中”，并允许本 App 自启动、后台省电策略设为“不限制”。"
+                : "监听关闭期间不会读取微信通知，也不会显示“微信消息监听中”。");
+    }
+
+    private void setMonitoringEnabled(boolean enabled) {
+        AppPrefs.setMonitoringEnabled(this, enabled);
+        if (enabled) {
+            ListenerMonitorService.ensureRunning(this);
+            WeChatNotificationListener.resume(this);
+            requestNotificationPermissionIfNeeded();
+        } else {
+            AlarmController.stop(this);
+            ListenerMonitorService.stopRunning(this);
+            WeChatNotificationListener.pause(this);
+        }
+        updateSummaries();
     }
 
     private void requestNotificationPermissionIfNeeded() {

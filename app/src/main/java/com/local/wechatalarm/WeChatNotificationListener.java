@@ -34,7 +34,8 @@ public class WeChatNotificationListener extends NotificationListenerService {
     private long connectedAtWallTime;
 
     static void requestReconnect(Context context) {
-        if (!ListenerAccess.isGranted(context)) {
+        if (!AppPrefs.isMonitoringEnabled(context)
+                || !ListenerAccess.isGranted(context)) {
             return;
         }
         long now = SystemClock.elapsedRealtime();
@@ -59,6 +60,9 @@ public class WeChatNotificationListener extends NotificationListenerService {
         }
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
+                if (!AppPrefs.isMonitoringEnabled(context)) {
+                    return;
+                }
                 requestRebind(component);
                 Log.i(TAG, "Notification listener rebind requested.");
             } catch (RuntimeException exc) {
@@ -69,6 +73,38 @@ public class WeChatNotificationListener extends NotificationListenerService {
         }, REBIND_DELAY_MS);
     }
 
+    static void pause(Context context) {
+        REBIND_PENDING.set(false);
+        connected = false;
+        WeChatNotificationListener instance = activeInstance;
+        if (instance == null) {
+            return;
+        }
+        instance.ready = false;
+        try {
+            instance.requestUnbind();
+            Log.i(TAG, "Notification listener paused by user.");
+        } catch (RuntimeException exc) {
+            Log.w(TAG, "Unable to pause notification listener", exc);
+        }
+    }
+
+    static void resume(Context context) {
+        if (!AppPrefs.isMonitoringEnabled(context)
+                || !ListenerAccess.isGranted(context)
+                || connected) {
+            return;
+        }
+        ComponentName component = new ComponentName(
+                context.getApplicationContext(), WeChatNotificationListener.class);
+        try {
+            requestRebind(component);
+            Log.i(TAG, "Notification listener resume requested.");
+        } catch (RuntimeException exc) {
+            Log.w(TAG, "Unable to resume notification listener", exc);
+        }
+    }
+
     static boolean isConnected() {
         return connected;
     }
@@ -77,6 +113,13 @@ public class WeChatNotificationListener extends NotificationListenerService {
     public void onListenerConnected() {
         super.onListenerConnected();
         activeInstance = this;
+        if (!AppPrefs.isMonitoringEnabled(this)) {
+            ready = false;
+            connected = false;
+            ListenerMonitorService.stopRunning(this);
+            pause(this);
+            return;
+        }
         connected = true;
         REBIND_PENDING.set(false);
         ListenerMonitorService.ensureRunning(this);
@@ -106,9 +149,13 @@ public class WeChatNotificationListener extends NotificationListenerService {
     public void onListenerDisconnected() {
         ready = false;
         connected = false;
-        Log.w(TAG, "Listener disconnected; forcing a clean reconnect.");
         super.onListenerDisconnected();
-        requestReconnect(this);
+        if (AppPrefs.isMonitoringEnabled(this)) {
+            Log.w(TAG, "Listener disconnected; forcing a clean reconnect.");
+            requestReconnect(this);
+        } else {
+            Log.i(TAG, "Listener disconnected while monitoring is paused.");
+        }
     }
 
     @Override
@@ -126,6 +173,9 @@ public class WeChatNotificationListener extends NotificationListenerService {
         Log.i(TAG, "onNotificationPosted package="
                 + (sbn == null ? "null" : sbn.getPackageName())
                 + ", ready=" + ready);
+        if (!AppPrefs.isMonitoringEnabled(this)) {
+            return;
+        }
         if (sbn != null && ListenerMonitorService.handleProbe(this, sbn)) {
             return;
         }

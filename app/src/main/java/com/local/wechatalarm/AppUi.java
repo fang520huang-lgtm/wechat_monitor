@@ -12,8 +12,10 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 
 final class AppUi {
@@ -165,6 +167,10 @@ final class AppUi {
         return new NavigationRow(activity, title);
     }
 
+    static ToggleRow toggleRow(Activity activity, String title) {
+        return new ToggleRow(activity, title);
+    }
+
     static void addDivider(Activity activity, LinearLayout group) {
         View divider = new View(activity);
         divider.setBackgroundColor(Color.rgb(236, 236, 238));
@@ -228,6 +234,68 @@ final class AppUi {
         }
     }
 
+    static final class ToggleRow extends LinearLayout {
+        private final TextView subtitleView;
+        private final Switch switchView;
+
+        ToggleRow(Activity activity, String titleText) {
+            super(activity);
+            setOrientation(HORIZONTAL);
+            setGravity(Gravity.CENTER_VERTICAL);
+            setPadding(dp(activity, 16), dp(activity, 14),
+                    dp(activity, 14), dp(activity, 14));
+            setMinimumHeight(dp(activity, 82));
+
+            LinearLayout labels = new LinearLayout(activity);
+            labels.setOrientation(VERTICAL);
+            LinearLayout.LayoutParams labelsParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+
+            TextView title = new TextView(activity);
+            title.setText(titleText);
+            title.setTextSize(17);
+            title.setTextColor(COLOR_TEXT);
+            title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            labels.addView(title, new LinearLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+
+            subtitleView = new TextView(activity);
+            subtitleView.setTextSize(14);
+            subtitleView.setTextColor(COLOR_SUBTEXT);
+            subtitleView.setPadding(0, dp(activity, 3), dp(activity, 12), 0);
+            labels.addView(subtitleView, new LinearLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+            addView(labels, labelsParams);
+
+            int[][] states = new int[][]{
+                    new int[]{android.R.attr.state_checked},
+                    new int[]{}
+            };
+            switchView = new Switch(activity);
+            switchView.setShowText(false);
+            switchView.setThumbTintList(new ColorStateList(
+                    states, new int[]{COLOR_ACCENT, Color.rgb(182, 182, 188)}));
+            switchView.setTrackTintList(new ColorStateList(
+                    states, new int[]{Color.rgb(162, 188, 255), Color.rgb(222, 222, 226)}));
+            addView(switchView, new LinearLayout.LayoutParams(
+                    LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+            setOnClickListener(v -> switchView.toggle());
+        }
+
+        void setSummary(String summary) {
+            subtitleView.setText(summary);
+        }
+
+        void setChecked(boolean checked) {
+            switchView.setChecked(checked);
+        }
+
+        void setOnCheckedChangeListener(CompoundButton.OnCheckedChangeListener listener) {
+            switchView.setOnCheckedChangeListener(listener);
+        }
+    }
+
     static void applyCard(Activity activity, View view) {
         view.setBackground(roundedDrawable(
                 activity, Color.rgb(244, 244, 245), Color.rgb(244, 244, 245), 18));
@@ -238,6 +306,11 @@ final class AppUi {
         int fill = success ? Color.rgb(239, 244, 255) : Color.rgb(255, 246, 228);
         int border = success ? Color.rgb(219, 229, 255) : Color.rgb(255, 226, 174);
         view.setBackground(roundedDrawable(activity, fill, border, 20));
+    }
+
+    static void applyPausedStatusPanel(Activity activity, View view) {
+        view.setBackground(roundedDrawable(
+                activity, Color.rgb(244, 244, 246), Color.rgb(228, 228, 232), 20));
     }
 
     private static RippleDrawable roundedRipple(Activity activity, int fill,

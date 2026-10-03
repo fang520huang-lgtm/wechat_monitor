@@ -25,12 +25,22 @@ public final class ListenerMonitorService extends Service {
 
     static void ensureRunning(Context context) {
         Context appContext = context.getApplicationContext();
+        if (!AppPrefs.isMonitoringEnabled(appContext)) {
+            stopRunning(appContext);
+            return;
+        }
         Intent intent = new Intent(appContext, ListenerMonitorService.class);
         try {
             appContext.startForegroundService(intent);
         } catch (RuntimeException exc) {
             Log.e(TAG, "Unable to start listener monitor service", exc);
         }
+    }
+
+    static void stopRunning(Context context) {
+        Context appContext = context.getApplicationContext();
+        appContext.stopService(new Intent(appContext, ListenerMonitorService.class));
+        MonitorNotification.cancel(appContext);
     }
 
     static boolean handleProbe(Context context, StatusBarNotification sbn) {
@@ -55,6 +65,11 @@ public final class ListenerMonitorService extends Service {
     public void onCreate() {
         super.onCreate();
         MonitorNotification.removeLegacy(this);
+        if (!AppPrefs.isMonitoringEnabled(this)) {
+            MonitorNotification.cancel(this);
+            stopSelf();
+            return;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                     MonitorNotification.NOTIFICATION_ID,
@@ -71,6 +86,12 @@ public final class ListenerMonitorService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (!AppPrefs.isMonitoringEnabled(this)) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            MonitorNotification.cancel(this);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         scheduleNextCheck(INITIAL_CHECK_DELAY_MS);
         return START_STICKY;
     }
@@ -78,8 +99,10 @@ public final class ListenerMonitorService extends Service {
     @Override
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        MonitorNotification.cancel(this);
         super.onDestroy();
-        Log.w(TAG, "Listener monitor service destroyed; system restart requested.");
+        Log.i(TAG, "Listener monitor service stopped.");
     }
 
     @Override
@@ -88,6 +111,10 @@ public final class ListenerMonitorService extends Service {
     }
 
     private void runHealthCheck() {
+        if (!AppPrefs.isMonitoringEnabled(this)) {
+            stopSelf();
+            return;
+        }
         if (!ListenerAccess.isGranted(this)) {
             Log.w(TAG, "Health check skipped because notification access is not granted.");
             scheduleNextCheck(CHECK_INTERVAL_MS);

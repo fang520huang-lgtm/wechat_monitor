@@ -44,6 +44,11 @@ public class PermissionSettingsActivity extends Activity {
 
         Button reconnectButton = AppUi.button(this, "重新连接监听服务");
         reconnectButton.setOnClickListener(v -> {
+            if (!AppPrefs.isMonitoringEnabled(this)) {
+                Toast.makeText(this, "请先返回首页打开消息监听",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
             WeChatNotificationListener.requestReconnect(this);
             Toast.makeText(this, "正在强制重新连接监听服务", Toast.LENGTH_SHORT).show();
         });
@@ -73,13 +78,19 @@ public class PermissionSettingsActivity extends Activity {
             return;
         }
         boolean granted = ListenerAccess.isGranted(this);
-        boolean connected = WeChatNotificationListener.isConnected();
-        statusView.setText(granted
-                ? (connected ? "✓ 通知监听已连接" : "⟳ 已授权，正在自动恢复连接")
-                : "⚠ 尚未授予通知使用权\n请点击下方按钮完成授权");
-        statusView.setTextColor(granted && connected
-                ? Color.rgb(22, 110, 55) : Color.rgb(180, 75, 0));
-        AppUi.applyStatusPanel(this, statusView, granted && connected);
+        boolean monitoringEnabled = AppPrefs.isMonitoringEnabled(this);
+        if (!monitoringEnabled) {
+            statusView.setText("监听开关已关闭\n返回首页打开后将自动连接");
+            statusView.setTextColor(AppUi.COLOR_SUBTEXT);
+            AppUi.applyPausedStatusPanel(this, statusView);
+        } else {
+            statusView.setText(granted
+                    ? "✓ 通知监听已连接"
+                    : "⚠ 尚未授予通知使用权\n请点击下方按钮完成授权");
+            statusView.setTextColor(granted
+                    ? Color.rgb(22, 110, 55) : Color.rgb(180, 75, 0));
+            AppUi.applyStatusPanel(this, statusView, granted);
+        }
     }
 
     private void openBatterySettings() {
