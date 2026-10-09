@@ -1,12 +1,16 @@
 <div align="center">
   <img src="app/src/main/res/drawable-nodpi/ic_notification_card_bell_large.png" width="96" alt="消息通知闹钟图标">
   <h1>消息通知闹钟</h1>
-  <p>微信、企业微信或 QQ 通知符合规则时，让手机持续响铃和/或震动，直到主动停止。</p>
+  <p>把重要的微信、企业微信和 QQ 通知变成不会轻易错过的持续闹钟提醒。</p>
 </div>
 
 ## 项目简介
 
-本 App 完全在 Android 手机本地运行，通过系统通知监听服务处理以下应用的通知：
+消息通知闹钟完全在 Android 手机本地运行。当聊天应用的系统通知符合自定义规则时，
+手机会持续响铃和/或震动，直到主动停止。例如设置“微信 + 标题完全匹配‘导师’”，
+即可在导师发来通知时触发闹钟。
+
+目前支持：
 
 - 微信：`com.tencent.mm`
 - 企业微信：`com.tencent.wework`
@@ -14,6 +18,19 @@
 
 App 不登录上述账号，也没有联网权限。通知文字只用于当次规则判断和闹钟通知，
 不会保存历史记录或上传。
+
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center"><strong>首页</strong><br><img src="docs/screenshots/home.png" width="320" alt="消息通知闹钟首页"></td>
+    <td align="center"><strong>匹配规则</strong><br><img src="docs/screenshots/targets.png" width="320" alt="匹配规则设置"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>铃声与震动</strong><br><img src="docs/screenshots/sound.png" width="320" alt="铃声与震动设置"></td>
+    <td align="center"><strong>权限与后台</strong><br><img src="docs/screenshots/permissions.png" width="320" alt="权限与后台设置"></td>
+  </tr>
+</table>
 
 ## 下载
 
@@ -36,7 +53,7 @@ App 不登录上述账号，也没有联网权限。通知文字只用于当次�
 
 示例：
 
-- 微信，标题完全匹配“张三”。
+- 微信，标题完全匹配“导师”。
 - 企业微信，正文部分匹配“紧急”。
 - QQ，标题部分匹配“项目群”，同时正文部分匹配“上线”。
 
