@@ -15,12 +15,12 @@ import android.util.Log;
 
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WeChatNotificationListener extends NotificationListenerService {
     private static final String TAG = "WeChatAlarmListener";
-    private static final String WECHAT_PACKAGE = "com.tencent.mm";
     private static final int MAX_SEEN = 300;
     private static final long REBIND_DELAY_MS = 700L;
     private static final long REBIND_COOLDOWN_MS = 5_000L;
@@ -132,7 +132,8 @@ public class WeChatNotificationListener extends NotificationListenerService {
                 StatusBarNotification[] active = getActiveNotifications();
                 if (active != null) {
                     for (StatusBarNotification sbn : active) {
-                        if (WECHAT_PACKAGE.equals(sbn.getPackageName())) {
+                        if (MatchRule.AppSource.fromPackageName(
+                                sbn.getPackageName()) != null) {
                             seen.add(fingerprint(sbn));
                         }
                     }
@@ -142,7 +143,7 @@ public class WeChatNotificationListener extends NotificationListenerService {
             }
         }
         ready = true;
-        Log.i(TAG, "Listener connected; active WeChat notifications seeded.");
+        Log.i(TAG, "Listener connected; active supported notifications seeded.");
     }
 
     @Override
@@ -179,7 +180,12 @@ public class WeChatNotificationListener extends NotificationListenerService {
         if (sbn != null && ListenerMonitorService.handleProbe(this, sbn)) {
             return;
         }
-        if (!ready || sbn == null || !WECHAT_PACKAGE.equals(sbn.getPackageName())) {
+        if (!ready || sbn == null) {
+            return;
+        }
+        MatchRule.AppSource source =
+                MatchRule.AppSource.fromPackageName(sbn.getPackageName());
+        if (source == null) {
             return;
         }
 
@@ -188,14 +194,13 @@ public class WeChatNotificationListener extends NotificationListenerService {
             return;
         }
 
-        Bundle extras = notification.extras;
         String title = extractTitle(notification).trim();
         String text = extractText(notification).trim();
-        Log.i(TAG, "Parsed WeChat notification title=" + title
+        Log.i(TAG, "Parsed " + source.displayName + " notification title=" + title
                 + ", text=" + text
                 + ", ticker=" + charSequenceToString(notification.tickerText));
-        if (title.isEmpty()) {
-            Log.w(TAG, "WeChat notification has no usable sender title.");
+        if (title.isEmpty() && text.isEmpty()) {
+            Log.w(TAG, source.displayName + " notification has no usable title or text.");
             return;
         }
 
@@ -213,21 +218,32 @@ public class WeChatNotificationListener extends NotificationListenerService {
             return;
         }
 
-        Set<String> targets = AppPrefs.getTargets(this);
-        if (!targets.contains(title)) {
-            Log.d(TAG, "Ignored WeChat sender: " + title);
+        List<MatchRule> rules = AppPrefs.getRules(this);
+        MatchRule matchedRule = null;
+        for (MatchRule rule : rules) {
+            if (rule.matches(source, title, text)) {
+                matchedRule = rule;
+                break;
+            }
+        }
+        if (matchedRule == null) {
+            Log.d(TAG, "Ignored " + source.displayName
+                    + " notification; no rule matched.");
             return;
         }
 
-        Log.i(TAG, "Matched sender: " + title + ", user=" + sbn.getUser());
-        AlarmController.start(this, "微信消息：" + title,
+        Log.i(TAG, "Matched rule: " + matchedRule.summary()
+                + ", user=" + sbn.getUser());
+        AlarmController.start(this,
+                source.displayName + "消息：" + (title.isEmpty() ? "新消息" : title),
                 TextUtils.isEmpty(text) ? "收到一条新消息" : text);
     }
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        if (sbn != null && WECHAT_PACKAGE.equals(sbn.getPackageName())) {
-            Log.i(TAG, "WeChat notification removed: " + sbn.getKey());
+        if (sbn != null && MatchRule.AppSource.fromPackageName(
+                sbn.getPackageName()) != null) {
+            Log.i(TAG, "Supported notification removed: " + sbn.getKey());
         }
     }
 

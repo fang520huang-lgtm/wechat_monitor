@@ -8,7 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 
-import java.util.Set;
+import java.util.List;
 
 final class MonitorNotification {
     static final String CHANNEL_ID = "wechat_monitor_service";
@@ -23,9 +23,9 @@ final class MonitorNotification {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "微信监听运行状态",
+                "消息通知监听运行状态",
                 NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("保持微信消息闹钟自动监听");
+        channel.setDescription("保持消息通知闹钟自动监听微信、企业微信与 QQ");
         channel.setSound(null, null);
         channel.enableVibration(false);
         manager.createNotificationChannel(channel);
@@ -44,14 +44,14 @@ final class MonitorNotification {
                 context, 20, openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        Set<String> targets = AppPrefs.getTargets(context);
-        String targetSummary;
-        if (targets.isEmpty()) {
-            targetSummary = "尚未添加监听对象";
-        } else if (targets.size() == 1) {
-            targetSummary = "监听对象：" + targets.iterator().next();
+        List<MatchRule> rules = AppPrefs.getRules(context);
+        String ruleSummary;
+        if (rules.isEmpty()) {
+            ruleSummary = "尚未添加匹配规则";
+        } else if (rules.size() == 1) {
+            ruleSummary = rules.get(0).summary();
         } else {
-            targetSummary = "监听多个对象";
+            ruleSummary = "已设置 " + rules.size() + " 条匹配规则";
         }
 
         Bundle extras = new Bundle();
@@ -63,17 +63,17 @@ final class MonitorNotification {
         boolean connected = WeChatNotificationListener.isConnected();
         String statusTitle;
         if (!granted) {
-            statusTitle = "微信消息监听未授权";
+            statusTitle = "消息通知监听未授权";
         } else if (connected) {
-            statusTitle = "微信消息监听中";
+            statusTitle = "消息通知监听中";
         } else {
-            statusTitle = "正在恢复微信消息监听";
+            statusTitle = "正在恢复消息监听";
         }
 
         Notification notification = new Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_bell_large)
                 .setContentTitle(statusTitle)
-                .setContentText(targetSummary)
+                .setContentText(ruleSummary)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setOngoing(true)

@@ -30,6 +30,9 @@ public class SoundSettingsActivity extends Activity {
 
     private TextView currentToneView;
     private Ringtone previewRingtone;
+    private Switch soundSwitch;
+    private Switch vibrationSwitch;
+    private boolean updatingAlertSwitches;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,7 +78,8 @@ public class SoundSettingsActivity extends Activity {
         AppUi.addBackHeader(this, root, "铃声与震动");
 
         TextView description = new TextView(this);
-        description.setText("所有监听对象共用这里设置的一种铃声。系统铃声会在 App 内直接列出和试听。");
+        description.setText("可选择仅铃声、仅震动，或铃声与震动同时提醒。"
+                + "闹钟播放时会优先使用手机内置扬声器。");
         description.setTextSize(16);
         description.setTextColor(Color.DKGRAY);
         root.addView(description, AppUi.fullWidth(this, 14));
@@ -106,16 +110,53 @@ public class SoundSettingsActivity extends Activity {
         });
         root.addView(bundledButton, AppUi.fullWidth(this, 12));
 
-        Switch vibrationSwitch = new Switch(this);
+        soundSwitch = new Switch(this);
+        soundSwitch.setText("收到消息时持续播放铃声");
+        soundSwitch.setTextSize(17);
+        soundSwitch.setPadding(AppUi.dp(this, 16), AppUi.dp(this, 14),
+                AppUi.dp(this, 16), AppUi.dp(this, 14));
+        soundSwitch.setChecked(AppPrefs.isSoundEnabled(this));
+        AppUi.applyCard(this, soundSwitch);
+        root.addView(soundSwitch, AppUi.fullWidth(this, 10));
+
+        vibrationSwitch = new Switch(this);
         vibrationSwitch.setText("收到消息时持续震动");
         vibrationSwitch.setTextSize(17);
         vibrationSwitch.setPadding(AppUi.dp(this, 16), AppUi.dp(this, 14),
                 AppUi.dp(this, 16), AppUi.dp(this, 14));
         vibrationSwitch.setChecked(AppPrefs.isVibrationEnabled(this));
-        vibrationSwitch.setOnCheckedChangeListener((buttonView, checked) ->
-                AppPrefs.setVibrationEnabled(this, checked));
         AppUi.applyCard(this, vibrationSwitch);
-        root.addView(vibrationSwitch, AppUi.fullWidth(this, 24));
+        root.addView(vibrationSwitch, AppUi.fullWidth(this, 10));
+
+        soundSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (updatingAlertSwitches) {
+                return;
+            }
+            if (!checked && !vibrationSwitch.isChecked()) {
+                restoreRequiredSwitch(soundSwitch);
+                return;
+            }
+            AppPrefs.setSoundEnabled(this, checked);
+            updateRingtoneSummary();
+        });
+        vibrationSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+            if (updatingAlertSwitches) {
+                return;
+            }
+            if (!checked && !soundSwitch.isChecked()) {
+                restoreRequiredSwitch(vibrationSwitch);
+                return;
+            }
+            AppPrefs.setVibrationEnabled(this, checked);
+        });
+
+        TextView modeHelp = new TextView(this);
+        modeHelp.setText("铃声和震动至少保留一项。Android 9 及以上会优先把铃声路由到手机内置扬声器。"
+                + "Android 8.x 受系统接口限制，仍使用系统默认音频路由。");
+        modeHelp.setTextSize(14);
+        modeHelp.setTextColor(Color.DKGRAY);
+        modeHelp.setLineSpacing(0, 1.1f);
+        root.addView(modeHelp, AppUi.fullWidth(this, 24));
 
         root.addView(AppUi.sectionTitle(this, "试听最终效果"),
                 AppUi.fullWidth(this, 8));
@@ -280,7 +321,19 @@ public class SoundSettingsActivity extends Activity {
 
     private void updateRingtoneSummary() {
         if (currentToneView != null) {
-            currentToneView.setText("当前铃声\n" + AppPrefs.getRingtoneName(this));
+            String status = AppPrefs.isSoundEnabled(this)
+                    ? "已启用，将优先从手机扬声器播放"
+                    : "当前为仅震动，重新开启铃声后使用";
+            currentToneView.setText("当前铃声\n" + AppPrefs.getRingtoneName(this)
+                    + "\n" + status);
         }
+    }
+
+    private void restoreRequiredSwitch(Switch target) {
+        updatingAlertSwitches = true;
+        target.setChecked(true);
+        updatingAlertSwitches = false;
+        Toast.makeText(this, "铃声和震动至少需要开启一项",
+                Toast.LENGTH_SHORT).show();
     }
 }

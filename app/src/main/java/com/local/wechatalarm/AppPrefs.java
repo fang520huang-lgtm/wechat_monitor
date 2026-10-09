@@ -4,61 +4,88 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 final class AppPrefs {
     static final String PREFS = "wechat_alarm_prefs";
-    static final String KEY_TARGETS = "target_names";
-    static final String DEFAULT_TARGET = "导师";
-    static final String DEFAULT_RINGTONE_NAME = "微信消息闹钟默认铃声";
+    static final String DEFAULT_RINGTONE_NAME = "消息通知闹钟默认铃声";
 
+    private static final String KEY_RULES = "match_rules_v2";
+    private static final String KEY_LEGACY_TARGETS = "target_names";
+    private static final String DEFAULT_LEGACY_TARGET = "导师";
     private static final String KEY_RINGTONE_URI = "ringtone_uri";
     private static final String KEY_RINGTONE_NAME = "ringtone_name";
+    private static final String KEY_SOUND_ENABLED = "sound_enabled";
     private static final String KEY_VIBRATION_ENABLED = "vibration_enabled";
     private static final String KEY_MONITORING_ENABLED = "monitoring_enabled";
     private static final String KEY_LISTENER_PROBE_ACK = "listener_probe_ack";
 
     private AppPrefs() {}
 
-    static String getRawTargets(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString(KEY_TARGETS, DEFAULT_TARGET);
+    static List<MatchRule> getRules(Context context) {
+        SharedPreferences preferences =
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!preferences.contains(KEY_RULES)) {
+            List<MatchRule> migrated = migrateLegacyTargets(preferences);
+            saveRules(context, migrated);
+            return migrated;
+        }
+
+        String raw = preferences.getString(KEY_RULES, "");
+        List<MatchRule> rules = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) {
+            return rules;
+        }
+        for (String line : raw.split("\n")) {
+            MatchRule rule = MatchRule.deserialize(line);
+            if (rule != null) {
+                rules.add(rule);
+            }
+        }
+        return rules;
     }
 
-    static void saveRawTargets(Context context, String value) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_TARGETS, value.trim())
-                .apply();
-    }
-
-    static void saveTargets(Context context, Collection<String> values) {
+    static void saveRules(Context context, Collection<MatchRule> rules) {
         StringBuilder raw = new StringBuilder();
-        for (String value : values) {
-            String normalized = value == null ? "" : value.trim();
-            if (normalized.isEmpty()) {
+        for (MatchRule rule : rules) {
+            if (rule == null || !rule.isValid()) {
                 continue;
             }
             if (raw.length() > 0) {
                 raw.append('\n');
             }
-            raw.append(normalized);
+            raw.append(rule.serialize());
         }
-        saveRawTargets(context, raw.toString());
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_RULES, raw.toString())
+                .apply();
     }
 
-    static Set<String> getTargets(Context context) {
-        String raw = getRawTargets(context);
-        Set<String> targets = new LinkedHashSet<>();
-        for (String item : raw.split("[,，;；\\n\\r]+")) {
-            String normalized = item.trim();
-            if (!normalized.isEmpty()) {
-                targets.add(normalized);
+    private static List<MatchRule> migrateLegacyTargets(SharedPreferences preferences) {
+        String raw = preferences.getString(KEY_LEGACY_TARGETS, DEFAULT_LEGACY_TARGET);
+        Set<String> names = new LinkedHashSet<>();
+        if (raw != null) {
+            for (String item : raw.split("[,，;；\\n\\r]+")) {
+                String normalized = item.trim();
+                if (!normalized.isEmpty()) {
+                    names.add(normalized);
+                }
             }
         }
-        return targets;
+
+        List<MatchRule> rules = new ArrayList<>();
+        for (String name : names) {
+            rules.add(new MatchRule(
+                    MatchRule.AppSource.WECHAT,
+                    true, MatchRule.Mode.EXACT, name,
+                    false, MatchRule.Mode.EXACT, ""));
+        }
+        return rules;
     }
 
     static Uri getRingtoneUri(Context context) {
@@ -94,6 +121,18 @@ final class AppPrefs {
                     .putString(KEY_RINGTONE_NAME, displayName);
         }
         editor.apply();
+    }
+
+    static boolean isSoundEnabled(Context context) {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_SOUND_ENABLED, true);
+    }
+
+    static void setSoundEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_SOUND_ENABLED, enabled)
+                .apply();
     }
 
     static boolean isVibrationEnabled(Context context) {

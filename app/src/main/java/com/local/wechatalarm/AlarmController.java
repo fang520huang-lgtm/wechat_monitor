@@ -7,10 +7,13 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -36,14 +39,19 @@ final class AlarmController {
         stopPlaybackOnly();
         postAlarmNotification(appContext, title, text);
 
-        audioManager = appContext.getSystemService(AudioManager.class);
-        if (audioManager != null) {
-            int focusResult = audioManager.requestAudioFocus(
-                    null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
-            Log.i(TAG, "Audio focus result=" + focusResult);
+        if (AppPrefs.isSoundEnabled(appContext)) {
+            audioManager = appContext.getSystemService(AudioManager.class);
+            if (audioManager != null) {
+                int focusResult = audioManager.requestAudioFocus(
+                        null, AudioManager.STREAM_ALARM,
+                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+                Log.i(TAG, "Audio focus result=" + focusResult);
+            }
+            playRingtone(appContext);
+        } else {
+            Log.i(TAG, "Sound is disabled in app settings.");
         }
         acquireWakeLock(appContext);
-        playRingtone(appContext);
         if (AppPrefs.isVibrationEnabled(appContext)) {
             startVibration(appContext);
         } else {
@@ -63,9 +71,9 @@ final class AlarmController {
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "微信消息闹钟",
+                "消息通知闹钟",
                 NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("指定联系人发来微信消息时显示的响铃通知");
+        channel.setDescription("微信、企业微信或 QQ 通知符合规则时显示的持续提醒");
         channel.setSound(null, null);
         channel.enableVibration(false);
         channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
@@ -85,10 +93,16 @@ final class AlarmController {
                 context, 2, stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
+        boolean soundEnabled = AppPrefs.isSoundEnabled(context);
         boolean vibrationEnabled = AppPrefs.isVibrationEnabled(context);
-        String runningDescription = vibrationEnabled
-                ? "闹钟和震动将一直持续"
-                : "闹钟将一直持续（震动已关闭）";
+        String runningDescription;
+        if (soundEnabled && vibrationEnabled) {
+            runningDescription = "铃声和震动将一直持续";
+        } else if (soundEnabled) {
+            runningDescription = "铃声将一直持续（震动已关闭）";
+        } else {
+            runningDescription = "震动将一直持续（铃声已关闭）";
+        }
         Notification notification = new Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_bell_large)
                 .setContentTitle(title + "（点此停止）")
@@ -146,7 +160,52 @@ final class AlarmController {
         player.setDataSource(context, uri);
         player.setLooping(true);
         player.prepare();
+        preferBuiltInSpeaker(context, player);
         player.start();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            MediaPlayer startedPlayer = player;
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (player != startedPlayer) {
+                    return;
+                }
+                AudioDeviceInfo routedDevice = startedPlayer.getRoutedDevice();
+                Log.i(TAG, "Alarm routed device="
+                        + (routedDevice == null ? "unknown"
+                        : routedDevice.getProductName() + "/type="
+                        + routedDevice.getType()));
+            }, 300L);
+        }
+    }
+
+    private static void preferBuiltInSpeaker(Context context, MediaPlayer mediaPlayer) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            Log.w(TAG, "Per-player speaker routing requires Android 9 or newer.");
+            return;
+        }
+        AudioManager manager = context.getSystemService(AudioManager.class);
+        if (manager == null) {
+            return;
+        }
+
+        AudioDeviceInfo standardSpeaker = null;
+        AudioDeviceInfo safeSpeaker = null;
+        for (AudioDeviceInfo device : manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                standardSpeaker = device;
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                    && device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE) {
+                safeSpeaker = device;
+            }
+        }
+
+        AudioDeviceInfo preferred = safeSpeaker != null ? safeSpeaker : standardSpeaker;
+        if (preferred == null) {
+            Log.w(TAG, "No built-in speaker output was reported by the system.");
+            return;
+        }
+        boolean accepted = mediaPlayer.setPreferredDevice(preferred);
+        Log.i(TAG, "Built-in speaker preference accepted=" + accepted
+                + ", type=" + preferred.getType());
     }
 
     private static void startVibration(Context context) {

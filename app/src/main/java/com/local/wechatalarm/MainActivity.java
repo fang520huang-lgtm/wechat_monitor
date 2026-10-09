@@ -11,7 +11,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Button;
 
-import java.util.Set;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_NOTIFICATIONS = 1001;
@@ -45,8 +45,8 @@ public class MainActivity extends Activity {
 
     private android.view.View buildContent() {
         LinearLayout root = AppUi.newRoot(this);
-        AppUi.addHomeHeader(this, root, "微信消息闹钟",
-                "微信指定联系人来消息时持续响铃。");
+        AppUi.addHomeHeader(this, root, "消息通知闹钟",
+                "微信、企业微信或 QQ 通知符合规则时持续提醒。");
 
         LinearLayout monitoringGroup = AppUi.group(this);
         monitoringRow = AppUi.toggleRow(this, "消息监听");
@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         root.addView(AppUi.sectionTitle(this, "设置"), AppUi.fullWidth(this, 10));
 
         LinearLayout settingsGroup = AppUi.group(this);
-        targetsRow = AppUi.navigationRow(this, "监听对象");
+        targetsRow = AppUi.navigationRow(this, "匹配规则");
         targetsRow.setOnClickListener(v ->
                 startActivity(new Intent(this, TargetSettingsActivity.class)));
         settingsGroup.addView(targetsRow, AppUi.fullWidth(this, 0));
@@ -113,25 +113,25 @@ public class MainActivity extends Activity {
         }
         boolean granted = ListenerAccess.isGranted(this);
         boolean monitoringEnabled = AppPrefs.isMonitoringEnabled(this);
-        Set<String> targets = AppPrefs.getTargets(this);
-        String targetSummary;
-        String targetCardSummary;
-        if (targets.isEmpty()) {
-            targetSummary = "尚未添加监听对象";
-            targetCardSummary = targetSummary;
-        } else if (targets.size() == 1) {
-            targetSummary = "监听对象：" + targets.iterator().next();
-            targetCardSummary = targets.iterator().next();
+        List<MatchRule> rules = AppPrefs.getRules(this);
+        String ruleSummary;
+        String ruleCardSummary;
+        if (rules.isEmpty()) {
+            ruleSummary = "尚未添加匹配规则";
+            ruleCardSummary = ruleSummary;
+        } else if (rules.size() == 1) {
+            ruleSummary = "匹配规则：" + rules.get(0).summary();
+            ruleCardSummary = rules.get(0).summary();
         } else {
-            targetSummary = "正在监听 " + targets.size() + " 个对象";
-            targetCardSummary = "已监听 " + targets.size() + " 个对象";
+            ruleSummary = "正在使用 " + rules.size() + " 条匹配规则";
+            ruleCardSummary = "已设置 " + rules.size() + " 条匹配规则";
         }
 
         updatingMonitoringSwitch = true;
         monitoringRow.setChecked(monitoringEnabled);
         updatingMonitoringSwitch = false;
         monitoringRow.setSummary(monitoringEnabled
-                ? "已开启，收到指定联系人消息时提醒"
+                ? "已开启，微信、企业微信或 QQ 通知符合规则时提醒"
                 : "已关闭，不监听消息且不显示常驻通知");
 
         if (!monitoringEnabled) {
@@ -140,23 +140,26 @@ public class MainActivity extends Activity {
             AppUi.applyPausedStatusPanel(this, statusView);
         } else {
             statusView.setText(granted
-                    ? "●  监听运行中\n" + targetSummary
+                    ? "●  监听运行中\n" + ruleSummary
                     : "需要完成通知监听授权\n进入“权限与后台”进行设置");
             statusView.setTextColor(granted
                     ? AppUi.COLOR_ACCENT : Color.rgb(180, 92, 0));
             AppUi.applyStatusPanel(this, statusView, granted);
         }
 
-        String ringtoneSummary = AppPrefs.getRingtoneName(this);
-        targetsRow.setSummary(targetCardSummary);
-        soundRow.setSummary("铃声：" + ringtoneSummary
-                + "\n震动：" + (AppPrefs.isVibrationEnabled(this) ? "开启" : "关闭"));
+        boolean soundEnabled = AppPrefs.isSoundEnabled(this);
+        boolean vibrationEnabled = AppPrefs.isVibrationEnabled(this);
+        String alertMode = soundEnabled && vibrationEnabled
+                ? "铃声 + 震动" : (soundEnabled ? "仅铃声" : "仅震动");
+        targetsRow.setSummary(ruleCardSummary);
+        soundRow.setSummary("提醒方式：" + alertMode
+                + (soundEnabled ? "\n铃声：" + AppPrefs.getRingtoneName(this) : ""));
         permissionsRow.setSummary(!monitoringEnabled
                 ? (granted ? "通知使用权已保留，开启后自动连接" : "需要授予通知使用权")
                 : (granted ? "通知监听已连接" : "需要授予通知使用权"));
         noteView.setText(monitoringEnabled
-                ? "提示：保留通知栏的“微信消息监听中”，并允许本 App 自启动、后台省电策略设为“不限制”。"
-                : "监听关闭期间不会读取微信通知，也不会显示“微信消息监听中”。");
+                ? "提示：保留通知栏的“消息通知监听中”，并允许本 App 自启动、后台省电策略设为“不限制”。"
+                : "监听关闭期间不会读取微信、企业微信或 QQ 通知，也不会显示常驻通知。");
     }
 
     private void setMonitoringEnabled(boolean enabled) {
